@@ -1,0 +1,44 @@
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! Nexus configuration layer 2 interface legend
+!!!   **Note: Use two spaces indent under parent objects
+!!! INTERFACE SELECTION EXAMPLES: 
+!!!   interface Ethernet#/1 ; Ethernet#/1-4 ; Ethernet#/1, Ethernet#/3
+!!! COMMON INTERFACE LAYER2 CONFIGURATION EXAMPLES:
+!!!   description some_type_of_name
+!!!   switchport
+!!!   switchport access vlan <number>
+!!!   switchport mode trunk
+!!!   switchport trunk allowed vlan none
+!!!   switchport trunk allowed vlan add <number(s)>
+!!!   switchport trunk allowed vlan remove <number(s)>
+!!!   no shutdown
+!!!   shutdown
+!!! PVLAN CONFIGURATION
+!!!   switchport
+!!!   switchport mode private-vlan host
+!!!   switchport private-vlan host-association <number> <number>
+!!!   switchport block multicast 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!
+!!! Switch(es):  rackulf, MS-C-204-SLF2
+!!!---BEGINNING OF GLOBAL CONFIGURATIONS APPLIED TO NXOS DEVICE(S)---!!!
+
+
+
+ip prefix-list DIRECT-CONNECTED seq 2111 permit 10.0.13.0/24 
+
+
+interface Vlan2111
+  description ORKC10000021-PRT01
+  no shutdown
+  vrf member l3-evpn-twitter
+  no ip redirects
+  ip address 10.0.13.1/24
+  no ipv6 redirects
+  fabric forwarding mode anycast-gateway
+
+
+
+
+!!!---END OF GLOBAL CONFIGURATIONS APPLIED TO NXOS DEVICE(S)--!!!

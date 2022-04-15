@@ -1,0 +1,75 @@
+---
+- name: Add VLAN and Span to Uplink Trunk on Cisco Catalyst 9200 IOS XE Switch(es) 
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+      ## Prompt user for host(s) or IP address to be configured
+    - name: target_host
+      prompt: "Enter Switch(es) IP or Name"
+      private: no
+      
+      ## Prompt User for VLAN Number 
+    - name: vlan_id # User input variable
+      private: no
+      prompt: "Enter a SINGLE VLAN Number?"
+  
+      ## Prompt User for VLAN Name
+    - name: vlan_name # User input variable
+      private: no
+      prompt: "Enter VLAN Name?"
+    
+  ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+  ## Start of Script Configuration Sequence
+  tasks:
+    - name: Show VLAN Dababase and Uplink Port-channel Before Configuration Changes
+      cisco.ios.ios_command:
+        commands:
+        - show run | i hostname
+        - show run vlan
+        - show run interface Port-channel1
+      register: print_output
+
+    - debug: var=print_output.stdout_lines  
+
+    - pause:
+        prompt: "Review Uplink Port-channel Configuration BEFORE Changes; To Continue press Enter; To Cancel, press Control-C to A"
+
+    - name: Copy Switch(es) Interface(s) Configuration to External File, BEFORE changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_portchannel_backup_config.txt"
+
+    - name: Add VLAN to IOS switch
+      cisco.ios.ios_vlan:
+        name: "{{ vlan_name }}"
+        vlan_id: "{{ vlan_id }}"
+        state: present
+
+    - name: Add VLAN to Uplink Port-channel 
+      cisco.ios.ios_command:
+        commands:
+        - command: configure terminal
+        - command: interface Port-channel1
+        - command: switchport trunk allowed vlan add {{ vlan_id }}
+        - command: exit
+        - command: end
+
+    - name: Save VLAN and Port-channel Configurations Changes
+      cisco.ios.ios_config:
+        save_when: always
+
+    - name: Show VLAN Dababase and Uplink Port-channel After Configuration Changes
+      cisco.ios.ios_command:
+        commands:
+        - show run | i hostname
+        - show run vlan
+        - show run interface Port-channel1
+      register: print_output
+
+    - debug: var=print_output.stdout_lines  

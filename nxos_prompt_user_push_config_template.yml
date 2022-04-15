@@ -1,0 +1,65 @@
+---
+- name: Configure a text file specified range of interfaces
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch Name or IP"
+    private: no
+  
+  vars:
+     contents: "{{ lookup('file', '1nxos_push_config_template.txt') }}"
+
+    ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+  
+  tasks:
+    - debug: msg="The configuration in 1nxos_push_config_template.txt is {{ contents }}"
+
+    ## Pause script to allow user to read/review candidate configuration file before sending to device(s) ; User must press key to Continue or Abort
+    - pause:
+       prompt: "!!! REVIEW ABOVE CANDIDATE CONFIGURATION !!! To CONTINUE script Press (Enter) or To CANCEL script Press (Ctrl + C then A) "
+
+    ## Display Interfaces current configuration and save to file
+    - name: Display Switch(es) Running Configuration BEFORE Changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run 
+          - show clock
+          - show hostname
+      register: print_output
+    - debug: var=print_output.stdout_lines
+    
+    ## Capture the output from the previous show commands into a file for later forensics, in case there is an issue.
+    - name: Copy Switch(es) Interface(s) Configuration to External File, BEFORE changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_running_config_backup.txt"
+    
+    - name: Push Configuration from Template File to Switch(es)
+      nxos_config:
+        src: 1nxos_push_config_template.txt
+
+    - name: Save switch(es) Configuration After Script Completion
+      nxos_config:
+        save_when: always
+    ## Display the contents of the interface template file again
+    - debug: msg="The configuration in 1nxos_push_config_template.txt is {{ contents }}"
+
+    ## Display Interfaces current configuration and save to file
+    - name: Display Switch(es) Configuration AFTER Changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run
+          - show clock
+          - show hostname
+      register: print_output
+    - debug: var=print_output.stdout_lines
+

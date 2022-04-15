@@ -1,0 +1,225 @@
+!!!!SV4 Pod2 Leaf Base Configuration Template !!!
+
+#feature nxapi
+feature bash-shell
+feature scp-server
+feature sftp-server
+feature tacacs+
+cfs ipv4 distribute
+nv overlay evpn
+feature ospf
+feature bgp
+feature ospfv3
+feature udld
+feature interface-vlan
+feature vn-segment-vlan-based
+feature lacp
+feature lldp
+feature vtp
+feature bfd
+
+clock timezone PST -8 0
+clock summer-time PST 1 Sunday March 02:00 1 Sunday November 02:00 60
+
+feature nv overlay
+
+no password strength-check
+username admin password 5 $5$g3gIhaao$tthMWnYznfDlRlkT7p9OUtx8J46yJX4BrykIRxbe5R.  role network-admin
+
+no ip domain-lookup
+
+tacacs-server key 7 "POX@u@$xqvd3c32"
+tacacs-server timeout 10
+tacacs-server host 10.92.1.11 
+tacacs-server host 10.88.1.11 
+
+aaa group server tacacs+ tacacs+ 
+    server 10.92.1.11 
+    server 10.88.1.11 
+    use-vrf management
+    source-interface mgmt0
+
+ip access-list vty_in_mac
+  statistics per-entry
+  1 permit ip 172.31.253.0 0.0.0.255 any 
+  10 permit ip 10.88.0.0 0.0.1.255 any 
+  20 permit ip 10.86.64.0 0.0.1.255 any 
+  30 permit ip 10.86.42.0 0.0.0.255 any 
+  40 permit ip 10.92.0.0 0.0.1.255 any 
+  50 permit ip 10.92.64.0 0.0.1.255 any 
+  60 permit ip 10.90.0.0 0.0.1.255 any 
+  70 permit ip 10.90.64.0 0.0.1.255 any 
+  80 permit ip 10.86.0.0 0.0.3.255 any 
+  90 permit ip 10.94.64.0 0.0.1.255 any 
+  100 permit ip 10.94.0.0 0.0.3.255 any 
+  110 permit ip 10.96.0.0 0.0.3.255 any 
+  120 permit ip 10.96.42.0 0.0.1.255 any 
+  130 permit ip 10.93.0.0 0.0.3.255 any 
+  140 permit ip 10.91.0.0 0.0.3.255 any 
+  150 permit ip 172.31.254.0 0.0.0.255 any 
+  160 permit ip 208.52.188.64 0.0.0.7 any 
+  170 permit ip 207.254.16.0 0.0.0.7 any 
+  180 permit ip 207.254.72.72 0.0.0.7 any 
+  190 permit ip 208.83.0.64 0.0.0.7 any 
+  200 permit ip 207.254.22.128 0.0.0.7 any 
+  1000 deny ip any any log 
+
+snmp-server user admin network-admin auth md5 0xd1dbcb31836924a23dadc359f3f60416 priv 0xd1dbcb31836924a23dadc359f3f60416 localizedkey
+snmp-server host 10.86.0.250 traps version 2c public udp-port 2162
+snmp-server host 10.88.0.251 traps version 2c public udp-port 2162
+snmp-server host 10.86.2.254 traps version 2c public udp-port 2162
+snmp-server host 10.96.2.253 traps version 2c public udp-port 2162
+
+rmon event 1 description FATAL(1) owner PMON@FATAL
+rmon event 2 description CRITICAL(2) owner PMON@CRITICAL
+rmon event 3 description ERROR(3) owner PMON@ERROR
+rmon event 4 description WARNING(4) owner PMON@WARNING
+rmon event 5 description INFORMATION(5) owner PMON@INFO
+
+snmp-server community AtlC010 group network-operator
+
+ntp server 10.88.1.18 use-vrf management
+ntp server 10.92.1.18 prefer use-vrf management
+ntp source-interface mgmt0
+
+aaa authentication login default group tacacs+ 
+aaa authentication login console group tacacs+ 
+aaa accounting default group tacacs+ 
+aaa authentication login invalid-username-log 
+aaa authentication login error-enable 
+tacacs-server directed-request 
+
+fabric forwarding anycast-gateway-mac 0000.1111.2222
+
+vlan 1000
+  name L3-EVPN-VXLAN
+  vn-segment 100000
+
+ip prefix-list BOGONS-IGP description BOGONS Networks
+ip prefix-list BOGONS-IGP seq 15 permit 0.0.0.0/8 le 32 
+ip prefix-list BOGONS-IGP seq 25 permit 127.0.0.0/8 le 32 
+ip prefix-list BOGONS-IGP seq 30 permit 169.254.0.0/16 le 32 
+ip prefix-list BOGONS-IGP seq 35 permit 172.16.0.0/12 le 32 
+ip prefix-list BOGONS-IGP seq 40 permit 192.0.2.0/24 le 32 
+ip prefix-list BOGONS-IGP seq 45 permit 192.168.0.0/16 le 32 
+ip prefix-list BOGONS-IGP seq 50 permit 198.51.100.0/24 le 32 
+ip prefix-list BOGONS-IGP seq 55 permit 203.0.113.0/24 le 32 
+ip prefix-list BOGONS-IGP seq 60 permit 224.0.0.0/4 le 32 
+ip prefix-list BOGONS-IGP seq 65 permit 240.0.0.0/4 le 32 
+ip prefix-list DIRECT-CONNECTED seq 2217 permit 10.0.18.0/23 
+ip prefix-list DIRECT-CONNECTED seq 2252 permit 10.0.14.0/23 
+
+route-map VRF-REDIST-DIRECT deny 10
+  match ip address prefix-list BOGONS-IGP 
+route-map VRF-REDIST-DIRECT permit 20
+  match ip address prefix-list DIRECT-CONNECTED 
+route-map VRF-REDIST-STATIC deny 10
+  match ip address prefix-list BOGONS-IGP 
+route-map VRF-REDIST-STATIC permit 20
+  match tag 100 
+
+vrf context l3-evpn-vxlan
+  description VXLAN Fabric External 
+  vni 100000
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+
+vrf context management
+  ip route 0.0.0.0/0 10.96.0.1
+
+interface Vlan1000
+  description l3-evpn-vxlan
+  no shutdown
+  vrf member l3-evpn-vxlan
+  no ip redirects
+  ip forward
+  no ipv6 redirects
+
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  advertise virtual-rmac
+  source-interface loopback5
+  member vni 12096-13994
+    ingress-replication protocol bgp
+  member vni 100000 associate-vrf
+
+interface Ethernet1/49
+  description [LEAF_SPINE] MS-C-619-SPN1 - Ethernet1/
+  mtu 9216
+  port-type fabric
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 20 area 0.0.0.1
+  no shutdown
+
+interface Ethernet1/50
+  description [LEAF_SPINE] MS-C-610-SPN2 - Ethernet
+  mtu 9216
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 20 area 0.0.0.1
+  no shutdown
+
+interface mgmt0
+  description [MGMT] MS-C-XXX-MGT1 - Gig1/0/40
+  vrf member management
+
+interface loopback0
+  description VTEP Router_ID
+  ip router ospf 20 area 0.0.0.1
+
+interface loopback5
+  description NVE_ID
+  ip router ospf 20 area 0.0.0.1
+
+cli alias name bgp show ip bgp sum
+cli alias name ospf show ip ospf nei
+cli alias name bfd show bfd nei
+cli alias name wr copy running-config startup-config
+
+line console
+  exec-timeout 15
+
+line vty
+  session-limit 16
+  exec-timeout 15
+  access-class vty_in_mac in
+
+router ospf 20
+  bfd
+  log-adjacency-changes detail
+
+router bgp 65525
+  log-neighbor-changes
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+    retain route-target all
+    advertise-pip
+  neighbor 10.96.18.11
+    remote-as 65525
+    description MS-C-619-SPN1
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+  neighbor 10.96.18.12
+    remote-as 65525
+    description MS-C-610-SPN2
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+  vrf l3-evpn-vxlan
+    address-family ipv4 unicast
+      advertise l2vpn evpn
+      redistribute direct route-map VRF-REDIST-DIRECT
+      redistribute static route-map VRF-REDIST-STATIC
+
+logging server 10.96.64.20 5 use-vrf management facility syslog
+logging level daemon 2
+logging origin-id hostname

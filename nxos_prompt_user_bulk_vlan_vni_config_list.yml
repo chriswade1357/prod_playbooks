@@ -1,0 +1,86 @@
+---
+- name: Deploy Bulk VLAN/VNI Configuration on Nexus Switch
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch Name or IP"
+    private: no
+
+  - name: oper_state
+    prompt: "What Operational State for VLAN(s) ; present or absent?"
+    private: no
+
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+  tasks:
+    - name: Read List of VLANs from 1nxos_vlan_vni.csv File 
+      read_csv:
+       path: 1nxos_vlan_vni_list.csv
+      register: vlan_list
+      delegate_to: localhost
+
+    - name: Preview VLAN(s) Parameters to User from 1nxos_vlan_vni.csv File 
+      debug:
+        var: vlan_list.list
+      loop: "{{ vlan_list.list }}"
+
+    - pause:
+       prompt: "!!! REVIEW ABOVE VLAN LIST TO BE ADDED/REMOVED !!! To CONTINUE  Press (Enter) : To CANCEL Press (Ctrl + C then A) "
+
+    - name: Capture Current VLAN Database and EVPN Segment Configuration BEFORE Changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run vlan
+          - show run | section evpn
+          - show hostname
+          - show clock
+      register: print_output
+    - debug: var=print_output.stdout_lines
+
+    - name: Copy Switch(es) Current VLAN Database and EVPN Segment Configuration to External File, BEFORE Changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_{{ oper_state }}_vlan_evpn_config.txt"
+
+    - name: Configure Parameters for List of VLAN(s)
+      nxos_vlan:
+        aggregate:
+          - { vlan_id: '{{ item.vlan_id }}', name: '{{ item.vlan_name }}', mapped_vni: '{{ item.vlan_vni }}', state: '{{ oper_state }}' }
+      loop: "{{ vlan_list.list }}"
+          
+    - name: Configure Parameters for List of VNI(s) for BGP Replication
+      nxos_evpn_vni:
+        vni: "{{ item.vlan_vni }}"
+        route_distinguisher: "auto"
+        route_target_import: auto
+        route_target_export: auto
+        state: "{{ oper_state }}"
+      loop: "{{ vlan_list.list }}"
+
+    - name: Save Switch(es) Configuration After Script Completion
+      nxos_config:
+        save_when: always
+
+    - pause:
+        prompt: "Allow Switch(es) 5 Seconds to Save Configuration for Output Validation"
+        seconds: 5
+
+    - name: Display Switch(es) VLAN/VNI Configuration AFTER Changes
+      nxos_command:
+        commands:
+          - show hostname
+          - show run vlan 
+          - show run | section evpn 
+          - show vxlan 
+          - show clock
+          - show hostname
+      register: print_output
+    - debug: var=print_output.stdout_lines
+

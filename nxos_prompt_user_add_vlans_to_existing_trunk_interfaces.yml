@@ -1,0 +1,75 @@
+---
+- name: Add VLAN Existing Trunk Interface on Nexus switch
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch(es) Name or IP?"
+    private: no
+
+    ## Prompt user for Trunk Interfaces
+  - name: trunk_interfaces # User input variable
+    private: no
+    prompt: "Enter EXISTING!!! Trunk Interface(s)?"
+
+    ## Prompt user for VLAN Number(s) to Add to Existing Trunk
+  - name: trunk_vlans #User input variable
+    private: no
+    prompt: "Enter VLAN Number(s) to Add to EXISTING!!! Trunk(s)?"
+
+    ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+############### START OF SCRIPT EXECUTION SEQUENCE #############
+  tasks:
+
+    - name: Display Switch(es) Trunk Interface Status and Configuration BEFORE changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run interface {{ trunk_interfaces }}
+          - show interface {{ trunk_interfaces }} status
+          - show hostname
+          - show clock
+      register: print_output
+    - debug: var=print_output.stdout_lines
+
+    ## Pause script to allow user to read/review candidate configuration file before sending to device(s) ; User must press key to Continue or Abort
+    - pause:
+       prompt: "!!! REVIEW CURRENT CONFIGURATION !!! To CONTINUE script Press (Enter) or To CANCEL script Press (Ctrl + C then A) "
+
+    ## Capture the output from the previous show commands into a file for later forensics, in case there is an issue.
+    - name: Copy Switch(es) Interface(s) configuration to External File, BEFORE Changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_interface_backup_config.txt"
+    # Add VLANs to trunks
+    - name: Add VLAN(s) to Desired Trunk(s)
+      cisco.nxos.nxos_command:
+        commands:
+        - configure terminal
+        - command: interface {{ trunk_interfaces }}
+        - command: switchport trunk allowed vlan add {{ trunk_vlans }}
+
+    - name: Save switch(es) configuration after script tasks complete
+      nxos_config:
+        save_when: always
+
+    ## Display Interfaces current configuration and save to file
+    - name: Display Switch(es) Desired Trunk Interface(s) status AFTER changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run interface {{ trunk_interfaces }}
+          - show interface {{ trunk_interfaces }} status
+          - show start interface {{ trunk_interfaces }}
+          - show hostname
+          - show clock
+      register: print_output
+    - debug: var=print_output.stdout_lines
+

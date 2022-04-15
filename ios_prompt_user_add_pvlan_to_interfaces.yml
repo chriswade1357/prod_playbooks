@@ -1,0 +1,83 @@
+---
+- name: Prompt User for PVLAN Access on Interface(s) on IOS switch(es) 
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+      ## Prompt user for host(s) or IP address to be configured
+    - name: target_host
+      prompt: "Enter Switch(es) IP or Name"
+      private: no
+      
+      ## Prompt User for VLAN Number 
+    - name: pvlan_id # User input variable
+      private: no
+      prompt: "Enter a Secondary PVLAN Number"
+  
+      ## Prompt User for VLAN access interface
+    - name: interfaces_id # User input variable
+      private: no
+      prompt: "Enter Switch Interface(s) to Apply Secondary PVLAN"
+      ## Prompt User for Interface(s) Description
+    - name: interfaces_desc # User input variable
+      private: no
+      prompt: "Enter Interface(s) Description"
+  
+  ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+  tasks:
+    - name: Show Interfaces Database Before Configuration Changes
+      cisco.ios.ios_command:
+        commands:
+        - show run | i hostname
+        - show interface status
+        - show run | section interface
+        - show run | i hostname
+      register: print_output
+
+    - debug: var=print_output.stdout_lines  
+
+    - pause:
+        prompt: "Review Interface Configuration Before Changes; To Continue press Enter; Cancel, press Control-C to A"
+
+    - name: Copy Switch(es) Interface(s) Configuration to External File, BEFORE changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_interface_backup_config.txt"
+
+    - name: Default Designated Interface(s)
+      cisco.ios.ios_config:
+        lines: default interface range {{ interfaces_id }}
+
+    - name: Configure VLAN on Interface(s) 
+      cisco.ios.ios_command:
+        commands:
+        - command: configure terminal
+        - command: interface range {{ interfaces_id }}
+        - command: description {{ interfaces_desc }}
+        - command: switchport mode private-vlan host
+        - command: switchport private-vlan host-association 100 {{ pvlan_id }}
+        - command: switchport block multicast
+        - command: switchport block unicast
+        - command: load-interval 30
+        - command: no shutdown
+        - command: end
+
+    - name: Save VLAN configuration
+      cisco.ios.ios_config:
+        save_when: always
+
+    - name: Show Interfaces Database After Configuration Changes
+      cisco.ios.ios_command:
+        commands:
+        - show run | i hostname
+        - show interface status
+        - show run | section interface
+        - show run | i hostname
+      register: print_output
+
+    - debug: var=print_output.stdout_lines  

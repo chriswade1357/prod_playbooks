@@ -1,0 +1,114 @@
+---
+- name: Reprovision Trunk Interfaces on Nexus Switch
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch(es) Name or IP?"
+    private: no
+
+    ## Prompt user for Trunk Interfaces to Reprovision
+  - name: trunk_interfaces # User input variable
+    private: no
+    prompt: "Enter Trunk Interface(s) to Reprovision?"
+
+    ## Prompt user for VLAN Number(s) to Add to Trunk(s)
+  - name: trunk_vlans #User input variable
+    private: no
+    prompt: "Enter VLAN Number(s) to Add to Trunk(s)?"
+
+    ## Prompt user for Trunk Interface(s) Description
+  - name: trunk_desc #User input variable
+    private: no
+    prompt: "Enter Description to Add to Trunk(s)?"
+
+    ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+############### START OF SCRIPT EXECUTION SEQUENCE #############
+  tasks:
+
+    - name: Display Switch(es) Trunk Interface Status and Configuration BEFORE changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run interface {{ trunk_interfaces }}
+          - show interface {{ trunk_interfaces }} status
+          - show hostname
+          - show clock
+      register: print_output
+    - debug: var=print_output.stdout_lines
+
+    ## Pause script to allow user to read/review candidate configuration file before sending to device(s) ; User must press key to Continue or Abort
+    - pause:
+       prompt: "!!! REVIEW ABOVE CURENT CONFIGURATION !!! To CONTINUE script Press (Enter) or To CANCEL script Press (Ctrl + C then A) "
+
+    ## Capture the output from the previous show commands into a file for later forensics, in case there is an issue.
+    - name: Copy Switch(es) Interface(s) configuration to External File, BEFORE Changes
+      copy: 
+        content: "{{ print_output.stdout_lines | to_nice_yaml(indent=2) }}" 
+        dest: "/mnt/c/Users/criley/Documents/ansible_output_captures/{{ inventory_hostname }}_interface_backup_config.txt"
+
+    ## Default Target Interface(s)
+    - name: Set Target Interface(s) to Default Status
+      nxos_config:
+        lines: 
+          - default interface {{ trunk_interfaces }}
+  
+    - pause:
+        prompt: "Allow Switch(es) 10 Seconds to Default Interface(s)"
+        seconds: 10
+
+    ## Convert Target Interface(s) to Layer 2 Mode
+    - name: Convert Desired Interface(s) to Pruneed Trunk(s)
+      cisco.nxos.nxos_command:
+        commands:
+        - configure terminal
+        - command: interface {{ trunk_interfaces }}
+        - command: switchport
+        - command: switchport mode trunk
+        - command: switchport trunk allowed vlan none
+        - command: shutdown
+        - command: end
+
+    - pause:
+        prompt: "Allow Switch(es) 10 Seconds to Synchronize Layer 2 Interface Configuration"
+        seconds: 10
+
+    ## Span VLAN(s) to Target Trunk Interface(s)
+    - name: Add VLAN(s) to Target Trunk Interface(s) and Activate
+      cisco.nxos.nxos_command:
+        commands:
+        - configure terminal
+        - command: interface {{ trunk_interfaces }}
+        - command: description {{ trunk_desc }}
+        - command: switchport trunk allowed vlan add {{ trunk_vlans }}
+        - command: no shutdown
+        - command: end
+
+    - pause:
+        prompt: "Allow Switch(es) 10 Seconds to Synchronize VLAN Configuration"
+        seconds: 10
+
+    - name: Save switch(es) configuration after script tasks complete
+      nxos_config:
+        save_when: always
+
+    ## Display Interfaces current configuration and save to file
+    - name: Display Switch(es) Desired Trunk Interface(s) status AFTER changes
+      nxos_command:
+        commands:
+          - show hostname 
+          - show run interface {{ trunk_interfaces }}
+          - show interface {{ trunk_interfaces }} status
+          - show start interface {{ trunk_interfaces }}
+          - show hostname
+          - show clock
+      register: print_output
+    - debug: var=print_output.stdout_lines
+

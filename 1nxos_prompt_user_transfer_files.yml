@@ -1,0 +1,36 @@
+---
+- name: Upload Files to  Nexus Switch(es)
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: network_cli
+
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch Name(s)"
+    private: no
+
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+  tasks:
+  -  name: Copy NXOS BIN Software File to Switch(es)
+     nxos_file_copy:
+       local_file: /mnt/c/Users/criley/Downloads/nxos.9.3.8.bin
+       remote_file: nxos.9.3.8.bin
+       transfer_status: sent
+
+  -  name: Copy NXOS EPLD Software File to Switch(es)
+     nxos_file_copy:
+       local_file: /mnt/c/Users/criley/Downloads/n9000-epld.9.3.8.img
+       remote_file: n9000-epld.9.3.8.img
+       transfer_status: sent
+
+  - name: View Uploaded Files in Remote Switch(es) Directory
+    nxos_command:
+      commands:
+        - dir | i 9.3.8
+    register: print_output
+  - debug: var=print_output.stdout_lines 

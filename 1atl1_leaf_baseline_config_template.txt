@@ -1,0 +1,192 @@
+!!!! ATL1 Base Configuration Template !!!
+feature bash-shell
+feature scp-server
+feature sftp-server
+feature tacacs+
+cfs eth distribute
+nv overlay evpn
+feature ospf
+feature bgp
+feature private-vlan
+feature udld
+feature interface-vlan
+feature vn-segment-vlan-based
+feature lacp
+feature lldp
+feature vtp
+feature bfd
+clock timezone EST -5 0
+clock summer-time EDT 2 Sun Mar 02:00 1 Sun Nov 02:00 60
+feature nv overlay
+
+username admin password 5 $5$q4pfG49U$W5avhDl2ivyoFbric1xRVv8SfZyYh8dN0eePCsAYXFB  role network-admin
+
+
+
+tacacs-server key 7 "POX@u@$xqvd3c32"
+tacacs-server timeout 10
+tacacs-server host 10.88.1.11 
+tacacs-server host 10.88.1.12 
+aaa group server tacacs+ tacacs+ 
+    server 10.88.1.11 
+    server 10.88.1.12 
+    use-vrf management
+    source-interface mgmt0
+
+ip access-list vty_in_mac
+  statistics per-entry
+  1 permit ip 172.31.253.0 0.0.0.255 any 
+  10 permit ip 10.88.0.0 0.0.1.255 any 
+  20 permit ip 10.86.64.0 0.0.1.255 any 
+  30 permit ip 10.86.42.0 0.0.0.255 any 
+  40 permit ip 10.92.0.0 0.0.1.255 any 
+  50 permit ip 10.92.64.0 0.0.1.255 any 
+  60 permit ip 10.90.0.0 0.0.1.255 any 
+  70 permit ip 10.90.64.0 0.0.1.255 any 
+  80 permit ip 10.86.0.0 0.0.3.255 any 
+  90 permit ip 10.94.64.0 0.0.1.255 any 
+  100 permit ip 10.94.0.0 0.0.3.255 any 
+  110 permit ip 10.96.0.0 0.0.3.255 any 
+  120 permit ip 10.93.0.0 0.0.3.255 any 
+  130 permit ip 10.91.0.0 0.0.3.255 any 
+  140 permit ip 172.31.254.0 0.0.0.255 any 
+  150 permit ip 208.52.188.64 0.0.0.7 any 
+  160 permit ip 207.254.16.0 0.0.0.7 any 
+  170 permit ip 207.254.72.72 0.0.0.7 any 
+  180 permit ip 208.83.0.64 0.0.0.7 any 
+  190 permit ip 207.254.22.128 0.0.0.7 any 
+  1000 deny ip any any log 
+
+snmp-server user admin network-admin auth md5 0x3220641ebdbfd9211cd3b7d65c1d4485 priv 0x3220641ebdbfd9211cd3b7d65c1d4485 localizedkey
+snmp-server host 10.86.2.254 traps version 2c public udp-port 2162
+snmp-server host 10.86.2.253 traps version 2c public udp-port 2162
+
+snmp-server community AtlC010 group network-operator
+ntp server 10.88.1.18 prefer use-vrf management
+ntp server 10.88.1.19 use-vrf management
+ntp source-interface mgmt0
+aaa authentication login default group tacacs+ 
+aaa authentication login console group tacacs+ 
+aaa accounting default group tacacs+ 
+aaa authentication login invalid-username-log 
+aaa authentication login error-enable 
+tacacs-server directed-request 
+
+fabric forwarding anycast-gateway-mac 0000.1111.2222
+
+vrf context vxlan-vrf-100000
+  vni 100000
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+
+interface loopback0
+  description OSPF_BGP Router_ID
+  ip ospf network point-to-point
+  ip router ospf 10 area 0.0.0.1
+
+interface loopback5
+  description NVE_ID
+  ip router ospf 10 area 0.0.0.1
+
+vlan 1000
+  name VLAN-VRF-10000
+  vn-segment 100000
+
+interface Vlan1000
+  description l3-vni-vlan-for-vrf
+  no shutdown
+  vrf member vxlan-vrf-100000
+  no ip redirects
+  ip forward
+  no ipv6 redirects
+
+router ospf 10
+  bfd
+  log-adjacency-changes
+
+router bgp 65500
+  log-neighbor-changes
+  address-family ipv4 unicast
+  address-family l2vpn evpn
+    retain route-target all
+  neighbor 10.86.8.11
+    remote-as 65500
+    description MS-A-21-SPN1
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community extended
+  neighbor 10.86.8.12
+    remote-as 65500
+    description MS-A-29-SPN2
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community extended
+  neighbor 10.86.8.13
+    remote-as 65500
+    description MS-A-21-SPN3
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community extended
+  neighbor 10.86.8.14
+    remote-as 65500
+    description MS-A-29-SPN4
+    update-source loopback0
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community extended
+  vrf vxlan-vrf-100000
+    address-family ipv4 unicast
+      advertise l2vpn evpn
+
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback5
+  member vni 4096-8059
+    ingress-replication protocol bgp
+  member vni 100000 associate-vrf
+
+interface Ethernet1/49
+  description [UPLINK] MS-A-21-SPN1 - Ethernet
+  mtu 9216
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 10 area 0.0.0.1
+  no shutdown
+
+interface Ethernet1/50
+  description [UPLINK] MS-A-29-SPN2 - Ethernet
+  mtu 9216
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 10 area 0.0.0.1
+  no shutdown
+
+interface Ethernet1/51
+  description [UPLINK] MS-A-21-SPN3 - Ethernet
+  mtu 9216
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 10 area 0.0.0.1
+  no shutdown
+
+interface Ethernet1/52
+  description [UPLINK] MS-A-29-SPN4 - Ethernet
+  mtu 9216
+  no ip redirects
+  ip ospf network point-to-point
+  ip router ospf 10 area 0.0.0.1
+  no shutdown
+
+logging server 10.86.64.21 5 use-vrf management facility syslog
+logging source-interface mgmt0
+logging level daemon 2
+logging origin-id hostname
+
+errdisable recovery cause link-flap
+errdisable recovery interval 30

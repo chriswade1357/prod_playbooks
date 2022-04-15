@@ -1,0 +1,123 @@
+---
+- name: Deploy Baseline Configuration on LAS Leaf Switch
+  hosts: "{{ target_host }}" ## User will be prompted for this information below
+  gather_facts: false
+  connection: local
+  vars_prompt:
+    ## Prompt user for host(s) or IP address(es) to be configured
+  - name: target_host
+    prompt: "Enter Nexus Switch Name or IP"
+    private: no
+
+#    ## Prompt user for Loopback0 IP Address
+#  - name: loopback0_ip_addr # User input variable
+#    private: no
+#    prompt: "Enter Loopback0 IP Address (NO MASK!!!)"
+#
+#    ## Prompt user for Loopback5 IP Address
+#  - name: loopback5_ip_addr # User input variable
+#    private: no
+#    prompt: "Enter Loopback5 IP Address (NO MASK!!!)"
+#
+#    ## Prompt user for Spine1 Uplink IP Address
+#  - name: spine1_uplink_ip_addr # User input variable
+#    private: no
+#    prompt: "Enter Spine 1 Uplink IP Address (NO MASK!!!)"
+#
+#    ## Prompt user for Spine2 Uplink IP Address
+#  - name: spine2_uplink_ip_addr # User input variable
+#    private: no
+#    prompt: "Enter Spine 2 Uplink IP Address (NO MASK!!!)"
+
+  vars:
+      loopback0_ip_addr: "{{ lookup('csvfile', '{{ target_host }} file=tor_leaf_ip_scheme.csv delimiter=, col=2') }}"
+      loopback5_ip_addr: "{{ lookup('csvfile', '{{ target_host }} file=tor_leaf_ip_scheme.csv delimiter=, col=3') }}"
+      spine1_uplink_ip_addr: "{{ lookup('csvfile', '{{ target_host }} file=tor_leaf_ip_scheme.csv delimiter=, col=4') }}"
+      spine2_uplink_ip_addr: "{{ lookup('csvfile', '{{ target_host }} file=tor_leaf_ip_scheme.csv delimiter=, col=5') }}"
+
+   ## Take user input for target_host above and add to the hosts parameter
+  tasks:
+    - add_host:
+        name: "{{ target_host }}"
+  hosts: "{{ target_host }}"
+
+################################################################################################################################################
+### ATTENTION!! ABOVE VARIABLE PARAMETERS ARE SYNCHRONIZED WITH BELOW CONFIGURATIONS. DO NOT CHANGE BELOW SYNTAXES OR PLAYBOOK COULD FAIL!!!!###
+################################################################################################################################################
+  tasks:
+    - name: Display IP Scheme for Switch Configuration
+      debug:
+        msg: 
+          - "**Review IP Scheme Deployment Information**"
+          - "Switch...........{{ target_host }}"
+          - "Loopback0........{{ loopback0_ip_addr }}" 
+          - "Loopback5........{{ loopback5_ip_addr }}"
+          - "Ethernet1/49.....{{ spine1_uplink_ip_addr }}"
+          - "Ethernet1/50.....{{ spine2_uplink_ip_addr }}"
+          - "**Press Enter (Continue) or Ctrl + C then A (Cancel)**"
+
+    - pause:
+
+    - name: Push Base Configuration to LAS Leaf switch
+      nxos_config:
+        src: 1las_leaf_baseline_config_template.txt
+
+    - pause:
+       prompt: "Pause 10 Seconds to allow Switch time to apply baseline configuration template "
+       seconds: 10
+
+    - name: Apply Crypto RSA to device
+      nxos_config:
+        lines:
+          - crypto key generate rsa label {{ target_host }} modulus 2048
+
+    - name: Add IP Address to Loopback0 interface
+      nxos_config:
+        lines:
+          - ip address {{ loopback0_ip_addr }}/32
+        parents: interface loopback0
+
+    - name: Add Router ID to OSPF Process
+      nxos_config:
+        lines:
+          - router-id {{ loopback0_ip_addr }}
+        parents: router ospf 10
+
+    - name: Add Router ID to BGP Process
+      nxos_config:
+        lines:
+          - router-id {{ loopback0_ip_addr }}
+        parents: router bgp 65515
+ 
+    - name: Add IP Address to Loopback5 interface
+      nxos_config:
+        lines:
+          - ip address {{ loopback5_ip_addr }}/32
+        parents: interface loopback5
+
+    - name: Add IP Address to Spine1 Uplink (Ethernet1/49) interface
+      nxos_config:
+        lines:
+          - ip address {{ spine1_uplink_ip_addr }}/31
+        parents: interface  Ethernet1/49
+
+    - name: Add IP Address to Spine2 Uplink (Ethernet1/50) interface
+      nxos_config:
+        lines:
+          - ip address {{ spine2_uplink_ip_addr }}/31
+        parents: interface  Ethernet1/50
+
+    - name: Save switch(es) configuration after script tasks complete
+      nxos_config:
+        save_when: always
+
+    - name: Display layer 3 and tunnel interface output
+      nxos_command:
+        commands:
+          - show hostname 
+          - show ip interface brief
+          - show run int nve1
+          - show hostname
+      register: print_output
+    - debug: var=print_output.stdout_lines
+
